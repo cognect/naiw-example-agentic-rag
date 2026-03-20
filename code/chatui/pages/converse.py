@@ -47,6 +47,13 @@ HOST_MODEL = "Model Name"
 DEFAULT_RECURSION_LIMIT = 10
 RECURSION_LIMIT = int(os.getenv("RECURSION_LIMIT", DEFAULT_RECURSION_LIMIT))
 
+DEFAULT_SAMPLE_QUESTIONS = [
+    "How do I add an integration in the CLI?",
+    "How do I fix an inaccessible remote Location?",
+    "What are the NVIDIA-provided default base environments?",
+    "How do I create a support bundle for troubleshooting?",
+]
+
 
 # Model identifiers with prefix
 LLAMA = 'meta/llama-3.3-70b-instruct'  
@@ -248,12 +255,12 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
 
                 # Sample questions that users can click on to use
                 with gr.Row(equal_height=True):
-                    sample_query_1 = gr.Button("How do I add an integration in the CLI?", variant="secondary", size="sm", interactive=True)
-                    sample_query_2 = gr.Button("How do I fix an inaccessible remote Location?", variant="secondary", size="sm", interactive=True)
+                    sample_query_1 = gr.Button(DEFAULT_SAMPLE_QUESTIONS[0], variant="secondary", size="sm", interactive=True)
+                    sample_query_2 = gr.Button(DEFAULT_SAMPLE_QUESTIONS[1], variant="secondary", size="sm", interactive=True)
                 
                 with gr.Row(equal_height=True):
-                    sample_query_3 = gr.Button("What are the NVIDIA-provided default base environments?", variant="secondary", size="sm", interactive=True)
-                    sample_query_4 = gr.Button("How do I create a support bundle for troubleshooting?", variant="secondary", size="sm", interactive=True)
+                    sample_query_3 = gr.Button(DEFAULT_SAMPLE_QUESTIONS[2], variant="secondary", size="sm", interactive=True)
+                    sample_query_4 = gr.Button(DEFAULT_SAMPLE_QUESTIONS[3], variant="secondary", size="sm", interactive=True)
             
             # Hidden column to be rendered when the user collapses all settings.
             with gr.Column(scale=1, min_width=100, visible=False) as hidden_settings_column:
@@ -828,6 +835,35 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
                             interactive=True,
                             visible=False,
                         )
+
+                        gr.HTML('<hr style="border:1px solid #ccc; margin: 10px 0;">')
+                        gr.Markdown("##### Sample Questions")
+                        gr.Markdown("Edit the sample questions shown below the chat input. The wizard auto-fills these, or edit them manually.")
+                        wizard_sq_1 = gr.Textbox(
+                            value=DEFAULT_SAMPLE_QUESTIONS[0],
+                            label="Sample Question 1",
+                            lines=1,
+                            interactive=True,
+                        )
+                        wizard_sq_2 = gr.Textbox(
+                            value=DEFAULT_SAMPLE_QUESTIONS[1],
+                            label="Sample Question 2",
+                            lines=1,
+                            interactive=True,
+                        )
+                        wizard_sq_3 = gr.Textbox(
+                            value=DEFAULT_SAMPLE_QUESTIONS[2],
+                            label="Sample Question 3",
+                            lines=1,
+                            interactive=True,
+                        )
+                        wizard_sq_4 = gr.Textbox(
+                            value=DEFAULT_SAMPLE_QUESTIONS[3],
+                            label="Sample Question 4",
+                            lines=1,
+                            interactive=True,
+                        )
+                        wizard_update_sq_btn = gr.Button("Update Sample Questions", variant="secondary", size="sm")
 
                         # Hidden state to hold generated CSS and logo URL
                         wizard_theme_css = gr.State(value="")
@@ -1488,6 +1524,10 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
                     wizard_brand_topics: gr.update(visible=False, value=""),
                     wizard_theme_css: "",
                     wizard_logo_url: "",
+                    wizard_sq_1: gr.update(),
+                    wizard_sq_2: gr.update(),
+                    wizard_sq_3: gr.update(),
+                    wizard_sq_4: gr.update(),
                 }
 
             progress(0.7, desc="Validating colors for accessibility...")
@@ -1496,6 +1536,7 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
             css = assets.generate_css_overrides(theme)
             progress(0.9, desc="Done")
 
+            sq = theme.sample_questions or []
             return {
                 wizard_status: gr.update(
                     value="**Theme extracted successfully.** Review below, then click **Apply Theme** to rebrand the entire UI."
@@ -1508,11 +1549,17 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
                 wizard_brand_topics: gr.update(visible=True, value=""),
                 wizard_theme_css: css,
                 wizard_logo_url: theme.logo_url or "",
+                wizard_sq_1: gr.update(value=sq[0] if len(sq) > 0 else DEFAULT_SAMPLE_QUESTIONS[0]),
+                wizard_sq_2: gr.update(value=sq[1] if len(sq) > 1 else DEFAULT_SAMPLE_QUESTIONS[1]),
+                wizard_sq_3: gr.update(value=sq[2] if len(sq) > 2 else DEFAULT_SAMPLE_QUESTIONS[2]),
+                wizard_sq_4: gr.update(value=sq[3] if len(sq) > 3 else DEFAULT_SAMPLE_QUESTIONS[3]),
             }
 
         def _apply_theme(
             css, logo_url, bot_name, intro_msg, sys_prompt, brand_topics,
-            current_gen_prompt, current_router_prompt, chat_history
+            current_gen_prompt, current_router_prompt, chat_history,
+            sq1, sq2, sq3, sq4, website_url,
+            progress=gr.Progress(),
         ):
             updates = {}
 
@@ -1551,9 +1598,47 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
             placeholder = f"Ask {bot_name} anything..." if bot_name else "Enter text and press ENTER"
             updates[msg] = gr.update(placeholder=placeholder)
 
+            updates[sample_query_1] = gr.update(value=sq1) if sq1 and sq1.strip() else gr.update()
+            updates[sample_query_2] = gr.update(value=sq2) if sq2 and sq2.strip() else gr.update()
+            updates[sample_query_3] = gr.update(value=sq3) if sq3 and sq3.strip() else gr.update()
+            updates[sample_query_4] = gr.update(value=sq4) if sq4 and sq4.strip() else gr.update()
+
+            if website_url and website_url.strip():
+                progress(0.5, desc="Clearing existing context...")
+                database._clear()
+                progress(0.7, desc="Loading website into RAG context...")
+                vectorstore = database.upload([website_url.strip()])
+                context_ok = vectorstore is not None
+                updates[url_docs] = gr.update(value=website_url.strip())
+                updates[url_docs_upload] = gr.update(
+                    value="Context Created" if context_ok else "Load Failed — Try Again",
+                    variant="primary" if context_ok else "secondary",
+                    interactive=not context_ok,
+                )
+                updates[url_docs_clear] = gr.update(value="Clear Context", interactive=True)
+                updates[docs_upload] = gr.update(value=None)
+                updates[docs_clear] = gr.update(value="Clear Context", interactive=True)
+            else:
+                updates[url_docs] = gr.update()
+                updates[url_docs_upload] = gr.update()
+                updates[url_docs_clear] = gr.update()
+                updates[docs_upload] = gr.update()
+                updates[docs_clear] = gr.update()
+
             return updates
 
-        def _reset_theme():
+        def _update_sample_questions(q1, q2, q3, q4):
+            return {
+                sample_query_1: gr.update(value=q1) if q1 and q1.strip() else gr.update(),
+                sample_query_2: gr.update(value=q2) if q2 and q2.strip() else gr.update(),
+                sample_query_3: gr.update(value=q3) if q3 and q3.strip() else gr.update(),
+                sample_query_4: gr.update(value=q4) if q4 and q4.strip() else gr.update(),
+            }
+
+        def _reset_theme(progress=gr.Progress()):
+            progress(0.3, desc="Clearing branded context...")
+            database._clear()
+            progress(0.7, desc="Restoring defaults...")
             return {
                 theme_injector: gr.update(value=""),
                 page_header: gr.update(value=_default_header_html),
@@ -1561,7 +1646,20 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
                 prompt_router: gr.update(value=_default_router_prompt),
                 chatbot: gr.update(value=[]),
                 msg: gr.update(placeholder="Enter text and press ENTER"),
-                wizard_status: gr.update(value="Theme reset to default."),
+                sample_query_1: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[0]),
+                sample_query_2: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[1]),
+                sample_query_3: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[2]),
+                sample_query_4: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[3]),
+                wizard_sq_1: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[0]),
+                wizard_sq_2: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[1]),
+                wizard_sq_3: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[2]),
+                wizard_sq_4: gr.update(value=DEFAULT_SAMPLE_QUESTIONS[3]),
+                url_docs: gr.update(value=EXAMPLE_LINKS),
+                url_docs_upload: gr.update(value="Add to Context", variant="secondary", interactive=True),
+                url_docs_clear: gr.update(value="Context Cleared", variant="primary", interactive=False),
+                docs_upload: gr.update(value=None),
+                docs_clear: gr.update(value="Context Cleared", variant="primary", interactive=False),
+                wizard_status: gr.update(value="Theme reset to default. RAG context cleared — click **Add to Context** in the Documents tab to reload."),
                 wizard_preview: gr.update(value=""),
                 wizard_apply_btn: gr.update(interactive=False),
                 wizard_extracted_bot_name: gr.update(visible=False, value=""),
@@ -1578,23 +1676,40 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
             [wizard_status, wizard_preview, wizard_apply_btn,
              wizard_extracted_bot_name, wizard_extracted_intro,
              wizard_extracted_system_prompt, wizard_brand_topics,
-             wizard_theme_css, wizard_logo_url],
+             wizard_theme_css, wizard_logo_url,
+             wizard_sq_1, wizard_sq_2, wizard_sq_3, wizard_sq_4],
         )
 
         wizard_apply_btn.click(
             _apply_theme,
             [wizard_theme_css, wizard_logo_url, wizard_extracted_bot_name,
              wizard_extracted_intro, wizard_extracted_system_prompt,
-             wizard_brand_topics, prompt_generator, prompt_router, chatbot],
+             wizard_brand_topics, prompt_generator, prompt_router, chatbot,
+             wizard_sq_1, wizard_sq_2, wizard_sq_3, wizard_sq_4,
+             wizard_url],
             [theme_injector, page_header, prompt_generator, prompt_router,
-             chatbot, msg],
+             chatbot, msg, sample_query_1, sample_query_2,
+             sample_query_3, sample_query_4,
+             url_docs, url_docs_upload, url_docs_clear,
+             docs_upload, docs_clear],
+        )
+
+        wizard_update_sq_btn.click(
+            _update_sample_questions,
+            [wizard_sq_1, wizard_sq_2, wizard_sq_3, wizard_sq_4],
+            [sample_query_1, sample_query_2, sample_query_3, sample_query_4],
         )
 
         wizard_reset_btn.click(
             _reset_theme,
             [],
             [theme_injector, page_header, prompt_generator, prompt_router,
-             chatbot, msg, wizard_status, wizard_preview, wizard_apply_btn,
+             chatbot, msg, sample_query_1, sample_query_2,
+             sample_query_3, sample_query_4,
+             wizard_sq_1, wizard_sq_2, wizard_sq_3, wizard_sq_4,
+             url_docs, url_docs_upload, url_docs_clear,
+             docs_upload, docs_clear,
+             wizard_status, wizard_preview, wizard_apply_btn,
              wizard_extracted_bot_name, wizard_extracted_intro,
              wizard_extracted_system_prompt, wizard_brand_topics,
              wizard_theme_css, wizard_logo_url],

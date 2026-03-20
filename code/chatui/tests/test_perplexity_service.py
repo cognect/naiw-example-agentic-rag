@@ -8,6 +8,7 @@ import pytest
 from chatui.perplexity_service import (
     ExtractedTheme,
     ExtractionResult,
+    _build_extraction_prompt,
     _ensure_readable_theme,
     build_branded_header,
     extract_website_theme,
@@ -120,6 +121,12 @@ class TestExtractWebsiteTheme:
             "botName": "Test Assistant",
             "introMessage": "Hello! How can I help?",
             "systemPrompt": "You are a helpful assistant.",
+            "sampleQuestions": [
+                "What products do you offer?",
+                "How do I contact support?",
+                "What are your pricing plans?",
+                "Where can I find documentation?",
+            ],
         }
         mock_resp = MagicMock()
         mock_resp.ok = True
@@ -134,6 +141,9 @@ class TestExtractWebsiteTheme:
         assert result.data.primary_color is not None
         assert result.data.bot_name == "Test Assistant"
         assert result.data.logo_url is not None
+        assert result.data.sample_questions is not None
+        assert len(result.data.sample_questions) == 4
+        assert result.data.sample_questions[0] == "What products do you offer?"
 
     @patch("chatui.perplexity_service.requests.post")
     def test_handles_markdown_wrapped_json(self, mock_post):
@@ -195,6 +205,78 @@ class TestExtractWebsiteTheme:
 
         result = extract_website_theme("https://example.com", "pplx-key")
         assert result.success is False
+
+    @patch("chatui.perplexity_service.requests.post")
+    def test_sample_questions_missing(self, mock_post):
+        theme_data = {
+            "primaryColor": "#6366f1",
+            "backgroundColor": "#0f0f23",
+        }
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(theme_data)}}]
+        }
+        mock_post.return_value = mock_resp
+
+        result = extract_website_theme("https://example.com", "pplx-key")
+        assert result.success is True
+        assert result.data.sample_questions is None
+
+    @patch("chatui.perplexity_service.requests.post")
+    def test_sample_questions_empty_list(self, mock_post):
+        theme_data = {
+            "primaryColor": "#6366f1",
+            "backgroundColor": "#0f0f23",
+            "sampleQuestions": [],
+        }
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(theme_data)}}]
+        }
+        mock_post.return_value = mock_resp
+
+        result = extract_website_theme("https://example.com", "pplx-key")
+        assert result.success is True
+        assert result.data.sample_questions is None
+
+    @patch("chatui.perplexity_service.requests.post")
+    def test_sample_questions_truncated_to_four(self, mock_post):
+        theme_data = {
+            "primaryColor": "#6366f1",
+            "backgroundColor": "#0f0f23",
+            "sampleQuestions": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
+        }
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(theme_data)}}]
+        }
+        mock_post.return_value = mock_resp
+
+        result = extract_website_theme("https://example.com", "pplx-key")
+        assert result.success is True
+        assert len(result.data.sample_questions) == 4
+        assert result.data.sample_questions == ["Q1", "Q2", "Q3", "Q4"]
+
+    @patch("chatui.perplexity_service.requests.post")
+    def test_sample_questions_null_from_api(self, mock_post):
+        theme_data = {
+            "primaryColor": "#6366f1",
+            "backgroundColor": "#0f0f23",
+            "sampleQuestions": None,
+        }
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(theme_data)}}]
+        }
+        mock_post.return_value = mock_resp
+
+        result = extract_website_theme("https://example.com", "pplx-key")
+        assert result.success is True
+        assert result.data.sample_questions is None
 
 
 class TestMergeBrandIntoGeneratorPrompt:
@@ -297,3 +379,123 @@ class TestBuildBrandedHeader:
     def test_custom_subtitle(self):
         html = build_branded_header(bot_name="Bot", subtitle="Custom Sub")
         assert "Bot: Custom Sub" in html
+
+
+class TestBuildExtractionPrompt:
+    def test_includes_sample_questions_field(self):
+        prompt = _build_extraction_prompt("https://example.com")
+        assert "sampleQuestions" in prompt
+
+    def test_includes_sample_questions_instructions(self):
+        prompt = _build_extraction_prompt("https://example.com")
+        assert "4 concise, natural questions" in prompt
+        assert "under 60 characters" in prompt
+
+    def test_includes_website_url(self):
+        prompt = _build_extraction_prompt("https://nvidia.com")
+        assert "https://nvidia.com" in prompt
+
+
+class TestExtractedThemeSampleQuestions:
+    def test_default_sample_questions_is_none(self):
+        theme = ExtractedTheme()
+        assert theme.sample_questions is None
+
+    def test_sample_questions_round_trip(self):
+        questions = ["Q1?", "Q2?", "Q3?", "Q4?"]
+        theme = ExtractedTheme(sample_questions=questions)
+        assert theme.sample_questions == questions
+        assert len(theme.sample_questions) == 4
+
+    @patch("chatui.perplexity_service.requests.post")
+    def test_extraction_with_sample_questions_and_theme(self, mock_post):
+        """End-to-end: Perplexity returns both theme and sample questions."""
+        theme_data = {
+            "primaryColor": "#76b900",
+            "backgroundColor": "#1a1a2e",
+            "botName": "GreenBot",
+            "introMessage": "Hello!",
+            "systemPrompt": "You are GreenBot.",
+            "sampleQuestions": [
+                "What GPU should I use?",
+                "How do I install drivers?",
+                "What is CUDA?",
+                "Tell me about TensorRT",
+            ],
+        }
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(theme_data)}}]
+        }
+        mock_post.return_value = mock_resp
+
+        result = extract_website_theme("https://example.com", "pplx-key")
+        assert result.success is True
+        assert result.data.bot_name == "GreenBot"
+        assert result.data.sample_questions is not None
+        assert len(result.data.sample_questions) == 4
+        assert "GPU" in result.data.sample_questions[0]
+
+
+class TestDatabaseThemeWorkflow:
+    """Tests for the clear-then-upload pattern used by the theme wizard."""
+
+    @patch("chatui.utils.database.Chroma")
+    @patch("chatui.utils.database.NVIDIAEmbeddings")
+    def test_clear_then_upload_pattern(self, mock_embeddings, mock_chroma):
+        """Verifies clear + upload can run sequentially without error."""
+        from chatui.utils import database
+
+        mock_client = MagicMock()
+        mock_chroma.return_value._client = mock_client
+        mock_chroma.from_documents.return_value = MagicMock()
+
+        database._clear()
+        mock_client.delete_collection.assert_called_once_with(name="rag-chroma")
+        mock_client.create_collection.assert_called_once_with(name="rag-chroma")
+
+    @patch("chatui.utils.database.WebBaseLoader")
+    @patch("chatui.utils.database.Chroma")
+    @patch("chatui.utils.database.NVIDIAEmbeddings")
+    def test_upload_single_url(self, mock_embeddings, mock_chroma, mock_loader):
+        """Simulates uploading a single branded website URL."""
+        from langchain_core.documents import Document
+        from chatui.utils import database
+
+        doc = Document(page_content="Welcome to Acme Corp", metadata={"source": "https://acme.com"})
+        mock_loader.return_value.load.return_value = [doc]
+        mock_chroma.from_documents.return_value = MagicMock()
+
+        result = database.upload(["https://acme.com"])
+        assert result is not None
+        mock_loader.assert_called_once_with("https://acme.com")
+
+    @patch("chatui.utils.database.WebBaseLoader")
+    @patch("chatui.utils.database.Chroma")
+    @patch("chatui.utils.database.NVIDIAEmbeddings")
+    def test_upload_invalid_url_returns_none(self, mock_embeddings, mock_chroma, mock_loader):
+        from chatui.utils import database
+
+        result = database.upload(["not-a-url"])
+        assert result is None
+        mock_loader.assert_not_called()
+
+
+class TestDefaultSampleQuestions:
+    """Validates the DEFAULT_SAMPLE_QUESTIONS constant used by the wizard textboxes."""
+
+    def test_has_exactly_four(self):
+        from chatui.pages.converse import DEFAULT_SAMPLE_QUESTIONS
+        assert len(DEFAULT_SAMPLE_QUESTIONS) == 4
+
+    def test_all_non_empty_strings(self):
+        from chatui.pages.converse import DEFAULT_SAMPLE_QUESTIONS
+        for q in DEFAULT_SAMPLE_QUESTIONS:
+            assert isinstance(q, str)
+            assert len(q.strip()) > 0
+
+    def test_each_under_80_chars(self):
+        from chatui.pages.converse import DEFAULT_SAMPLE_QUESTIONS
+        for q in DEFAULT_SAMPLE_QUESTIONS:
+            assert len(q) < 80, f"Too long: {q}"

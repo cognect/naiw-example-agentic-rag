@@ -4,67 +4,16 @@ Running on local URL:  http://0.0.0.0:8080
 To create a public link, set `share=True` in `launch()`.
 IMPORTANT: You are using gradio version 4.15.0, however version 4.44.1 is available, please upgrade.
 --------
-[split_documents] Splitting 1 docs with chunk size 250, overlap 0
-[embed_documents] Embedding 21 chunks using model: nvidia/nv-embedqa-e5-v5
----ROUTE QUESTION---
-What is the dell services journey steps
-{'datasource': 'vectorstore'}
----ROUTE QUESTION TO RAG---
----RETRIEVE---
----CHECK DOCUMENT RELEVANCE TO QUESTION---
----GRADE: DOCUMENT RELEVANT---
----GRADE: DOCUMENT RELEVANT---
----GRADE: DOCUMENT RELEVANT---
----GRADE: DOCUMENT RELEVANT---
----ASSESS GRADED DOCUMENTS---
----DECISION: GENERATE---
----GENERATE---
----CHECK HALLUCINATIONS---
----DECISION: GENERATION IS GROUNDED IN DOCUMENTS---
----GRADE GENERATION vs QUESTION---
----DECISION: GENERATION ADDRESSES QUESTION---
 [clear] Collection 'rag-chroma' cleared.
-[clear] Removed directory: 88ee16f1-8bff-439e-ac17-566a5df7bb3f
 ---ROUTE QUESTION---
-Who are you?
-{'datasource': 'direct_answer'}
----ROUTE QUESTION TO DIRECT ANSWER---
----DIRECT GENERATE (no retrieval needed)---
----ROUTE QUESTION---
-Who are you?
-{'datasource': 'direct_answer'}
----ROUTE QUESTION TO DIRECT ANSWER---
----DIRECT GENERATE (no retrieval needed)---
----ROUTE QUESTION---
-What are the service areas in the dell services taxonomy
-{'datasource': 'vectorstore'}
----ROUTE QUESTION TO RAG---
----RETRIEVE---
----CHECK DOCUMENT RELEVANCE TO QUESTION---
----ASSESS GRADED DOCUMENTS---
----DECISION: ALL DOCUMENTS ARE NOT RELEVANT TO QUESTION, INCLUDE WEB SEARCH---
+Best Dell PC for gaming?
+{'datasource': 'web_search'}
+---ROUTE QUESTION TO WEB SEARCH---
 ---WEB SEARCH---
 ---GENERATE---
 ---CHECK HALLUCINATIONS---
 ---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---
 ---GRADE GENERATION vs QUESTION---
 ---DECISION: GENERATION ADDRESSES QUESTION---
-[split_documents] Splitting 1 docs with chunk size 250, overlap 0
-[embed_documents] Embedding 21 chunks using model: nvidia/nv-embedqa-e5-v5
----ROUTE QUESTION---
-What are the dell services taxonomy elements?
-{'datasource': 'vectorstore'}
----ROUTE QUESTION TO RAG---
----RETRIEVE---
----CHECK DOCUMENT RELEVANCE TO QUESTION---
----GRADE: DOCUMENT RELEVANT---
----GRADE: DOCUMENT RELEVANT---
----GRADE: DOCUMENT RELEVANT---
----GRADE: DOCUMENT RELEVANT---
----ASSESS GRADED DOCUMENTS---
----DECISION: GENERATE---
----GENERATE---
----CHECK HALLUCINATIONS---
----DECISION: GENERATION IS GROUNDED IN DOCUMENTS---
----GRADE GENERATION vs QUESTION---
----DECISION: GENERATION ADDRESSES QUESTION---
+[clear] Collection 'rag-chroma' cleared.
+[clear] Removed directory: aefdc59d-7245-42bd-95a8-4485dcefe432

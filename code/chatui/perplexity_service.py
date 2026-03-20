@@ -46,6 +46,7 @@ class ExtractedTheme:
     input_background: Optional[str] = None
     intro_message: Optional[str] = None
     system_prompt: Optional[str] = None
+    sample_questions: Optional[list] = None
 
 
 @dataclass
@@ -84,11 +85,16 @@ def _build_extraction_prompt(website_url: str) -> str:
         '  "botName": "a friendly assistant name based on the brand",\n'
         '  "introMessage": "a welcoming intro message incorporating the brand personality (1-2 sentences)",\n'
         '  "systemPrompt": "a professional system prompt defining the assistant role, personality, '
-        'and behavior based on the brand (3-5 sentences)"\n'
+        'and behavior based on the brand (3-5 sentences)",\n'
+        '  "sampleQuestions": ["array of exactly 4 short sample questions a visitor might ask '
+        'about this brand, its products, or services"]\n'
         "}\n\n"
         "For introMessage, make it friendly and aligned with the brand's voice.\n"
         "For systemPrompt, include: the assistant's role, the brand context, "
-        "communication style, and key behaviors.\n\n"
+        "communication style, and key behaviors.\n"
+        "For sampleQuestions, create 4 concise, natural questions that a real user "
+        "would ask about the brand's products, services, or content. Each question "
+        "should be under 60 characters.\n\n"
         "If you cannot determine a value, use null for that field. "
         "Focus on extracting the dominant brand colors visible on the website."
     )
@@ -252,6 +258,13 @@ def extract_website_theme(
 
         extracted = json.loads(clean)
 
+        raw_questions = extracted.get("sampleQuestions")
+        sample_questions = (
+            [str(q) for q in raw_questions[:4]]
+            if isinstance(raw_questions, list) and raw_questions
+            else None
+        )
+
         theme = ExtractedTheme(
             primary_color=extracted.get("primaryColor"),
             secondary_color=extracted.get("secondaryColor"),
@@ -264,6 +277,7 @@ def extract_website_theme(
             input_background=extracted.get("inputBackground"),
             intro_message=extracted.get("introMessage"),
             system_prompt=extracted.get("systemPrompt"),
+            sample_questions=sample_questions,
         )
 
         if not (theme.primary_color or theme.background_color or theme.secondary_color):

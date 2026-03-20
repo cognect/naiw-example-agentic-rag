@@ -9,7 +9,7 @@
 - **Edit Prompts**: Customize results through your own prompts
 - **Change Parameters**: Adjust agent behavior through parameters and runtime variables
 - **Look and Feel**: Change the agent and UI by editing the code yourself
-- **[Theme Wizard](agentic-rag-docs/theme-wizard.md)**: AI-powered white-labeling — extract branding from any website and apply it to the chat UI
+- **[Theme Wizard](agentic-rag-docs/theme-wizard.md)**: AI-powered white-labeling — extract branding, sample questions, and RAG context from any website and apply it to the chat UI
 
 ### Inference Your Way
 - **Free Endpoints**: use free endpoints on build.nvidia.com
@@ -95,7 +95,7 @@ This application is a quick prototype and not a robust piece of software. So the
    - Change the look and feel of the Gradio app or add new features
    - Modify the agent
    - Fix any bugs you find
-5. **White-label the UI** with the [Theme Wizard](agentic-rag-docs/theme-wizard.md) — extract branding from any website using AI
+5. **White-label the UI** with the [Theme Wizard](agentic-rag-docs/theme-wizard.md) — extract branding, sample questions, and RAG context from any website using AI
 
 
 </details>
@@ -142,7 +142,8 @@ route_question ─────┼── vectorstore ───→ retrieve → gr
 | `code/chatui/pages/converse.py` | Gradio UI — chat interface, settings tabs, Theme Wizard |
 | `code/chatui/utils/graph.py` | LangGraph nodes and conditional edges |
 | `code/chatui/utils/compile.py` | Graph compilation and wiring |
-| `code/chatui/perplexity_service.py` | Perplexity API theme extraction + prompt merging |
+| `code/chatui/perplexity_service.py` | Perplexity API theme extraction, sample questions, prompt merging |
+| `code/chatui/utils/database.py` | ChromaDB vector store — upload URLs/files, clear, retrieve |
 | `code/chatui/utils/color_utils.py` | WCAG 2.1 color contrast utilities |
 | `code/chatui/assets/__init__.py` | Theme loading + dynamic CSS generation |
 | `code/chatui/prompts/prompts_llama3.py` | Default prompts for Llama3 models |

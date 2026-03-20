@@ -26,6 +26,7 @@ def compile_graph():
     workflow.add_node("retrieve", graph.retrieve)  # retrieve
     workflow.add_node("grade_documents", graph.grade_documents)  # grade documents
     workflow.add_node("generate", graph.generate)  # generate
+    workflow.add_node("direct_generate", graph.direct_generate)  # identity/conversational
 
     # Build graph
     workflow.set_conditional_entry_point(
@@ -33,6 +34,7 @@ def compile_graph():
         {
             "websearch": "websearch",
             "vectorstore": "retrieve",
+            "direct_answer": "direct_generate",
         },
     )
     
@@ -45,6 +47,7 @@ def compile_graph():
             "generate": "generate",
         },
     )
+    workflow.add_edge("direct_generate", END)
     workflow.add_edge("websearch", "generate")
     workflow.add_conditional_edges(
         "generate",

@@ -133,6 +133,7 @@ EXAMPLE_LINKS = "\n".join(doc_links)
 from chatui import assets, chat_client
 from chatui.prompts import prompts_llama3, prompts_mistral
 from chatui.utils import compile, database, logger, gpu_compatibility
+from chatui import perplexity_service
 
 from langgraph.graph import END, StateGraph
 
@@ -207,7 +208,10 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
     model_list = [LLAMA, MISTRAL, QWEN]
 
     with gr.Blocks(title=TITLE, theme=kui_theme, css=kui_styles + _LOCAL_CSS) as page:
-        gr.Markdown(f"# {TITLE}")
+        page_header = gr.HTML(
+            value=f'<h1 style="margin:0;padding:4px 0;">{TITLE}</h1>',
+            elem_id="page-header",
+        )
 
         """ Keep state of which queries need to use NIMs vs API Endpoints. """
         
@@ -767,9 +771,74 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
                                     elem_id="contextbox",
                                 )
                     
-                    # Fifth tab item is for collapsing the entire settings pane for readability. 
-                    with gr.TabItem("Hide All Settings", id=4) as hide_all_settings:
+                    # Fifth tab: Perplexity Theme Wizard
+                    with gr.TabItem("Theme Wizard", id=4) as theme_wizard_tab:
+                        gr.Markdown(
+                            """
+                            ##### AI-Powered Theme Extraction
+                            - Enter a website URL and your Perplexity API key
+                            - Click **Run Wizard** to extract branding colors, fonts, and identity
+                            - Click **Apply Theme** to apply the extracted theme to this UI
+                            - Colors are validated for WCAG 2.1 accessibility compliance
+                            """
+                        )
+                        gr.HTML('<hr style="border:1px solid #ccc; margin: 10px 0;">')
+
+                        wizard_api_key = gr.Textbox(
+                            value=os.environ.get("PERPLEXITY_API_KEY", ""),
+                            label="Perplexity API Key",
+                            info="Get yours at perplexity.ai/settings/api — or set PERPLEXITY_API_KEY env var",
+                            type="password",
+                            elem_id="rag-inputs",
+                        )
+                        wizard_url = gr.Textbox(
+                            placeholder="https://example.com",
+                            label="Website URL",
+                            info="The website whose branding you want to extract",
+                            elem_id="rag-inputs",
+                        )
+                        with gr.Row():
+                            wizard_run_btn = gr.Button("Run Wizard", variant="primary")
+                            wizard_apply_btn = gr.Button("Apply Theme", variant="secondary", interactive=False)
+                            wizard_reset_btn = gr.Button("Reset Theme", variant="secondary")
+
+                        wizard_status = gr.Markdown(value="", visible=True)
+                        wizard_preview = gr.HTML(value="", visible=True)
+
+                        wizard_extracted_bot_name = gr.Textbox(
+                            label="Extracted Bot Name",
+                            interactive=True,
+                            visible=False,
+                        )
+                        wizard_extracted_intro = gr.Textbox(
+                            label="Extracted Intro Message",
+                            lines=2,
+                            interactive=True,
+                            visible=False,
+                        )
+                        wizard_extracted_system_prompt = gr.Textbox(
+                            label="Extracted System Prompt (merged with RAG instructions on apply)",
+                            lines=4,
+                            interactive=True,
+                            visible=False,
+                        )
+                        wizard_brand_topics = gr.Textbox(
+                            label="Brand Topics for Router (optional)",
+                            info="Comma-separated topics to route to vectorstore, e.g. 'pricing, support, products'",
+                            interactive=True,
+                            visible=False,
+                        )
+
+                        # Hidden state to hold generated CSS and logo URL
+                        wizard_theme_css = gr.State(value="")
+                        wizard_logo_url = gr.State(value="")
+
+                    # Sixth tab item is for collapsing the entire settings pane for readability. 
+                    with gr.TabItem("Hide All Settings", id=5) as hide_all_settings:
                         gr.Markdown("")
+
+        # Dynamic theme injection point — must be inside Blocks context
+        theme_injector = gr.HTML(value="", visible=True, elem_id="theme-injector")
 
         page.load(logger.read_logs, None, logs, every=1)
 
@@ -1397,6 +1466,138 @@ def build_page(client: chat_client.ChatClient) -> gr.Blocks:
                                nim_hallucination_id,
                                nim_answer_id,
                                chatbot], [msg, chatbot, actions]
+        )
+
+        """ Theme Wizard event handlers """
+
+        _default_header_html = f'<h1 style="margin:0;padding:4px 0;">{TITLE}</h1>'
+        _default_generator_prompt = prompts_llama3.generator_prompt
+        _default_router_prompt = prompts_llama3.router_prompt
+
+        def _run_theme_wizard(url: str, api_key: str, progress=gr.Progress()):
+            progress(0.2, desc="Connecting to Perplexity API...")
+            result = perplexity_service.extract_website_theme(url, api_key)
+            if not result.success:
+                return {
+                    wizard_status: gr.update(value=f"**Error:** {result.error}"),
+                    wizard_preview: gr.update(value=""),
+                    wizard_apply_btn: gr.update(interactive=False),
+                    wizard_extracted_bot_name: gr.update(visible=False, value=""),
+                    wizard_extracted_intro: gr.update(visible=False, value=""),
+                    wizard_extracted_system_prompt: gr.update(visible=False, value=""),
+                    wizard_brand_topics: gr.update(visible=False, value=""),
+                    wizard_theme_css: "",
+                    wizard_logo_url: "",
+                }
+
+            progress(0.7, desc="Validating colors for accessibility...")
+            theme = result.data
+            preview_html = assets.format_theme_preview(theme)
+            css = assets.generate_css_overrides(theme)
+            progress(0.9, desc="Done")
+
+            return {
+                wizard_status: gr.update(
+                    value="**Theme extracted successfully.** Review below, then click **Apply Theme** to rebrand the entire UI."
+                ),
+                wizard_preview: gr.update(value=preview_html),
+                wizard_apply_btn: gr.update(interactive=True),
+                wizard_extracted_bot_name: gr.update(visible=True, value=theme.bot_name or ""),
+                wizard_extracted_intro: gr.update(visible=True, value=theme.intro_message or ""),
+                wizard_extracted_system_prompt: gr.update(visible=True, value=theme.system_prompt or ""),
+                wizard_brand_topics: gr.update(visible=True, value=""),
+                wizard_theme_css: css,
+                wizard_logo_url: theme.logo_url or "",
+            }
+
+        def _apply_theme(
+            css, logo_url, bot_name, intro_msg, sys_prompt, brand_topics,
+            current_gen_prompt, current_router_prompt, chat_history
+        ):
+            updates = {}
+
+            updates[theme_injector] = gr.update(value=css if css else "")
+
+            header_html = perplexity_service.build_branded_header(
+                bot_name=bot_name or None,
+                logo_url=logo_url or None,
+                subtitle="Agentic RAG",
+            )
+            updates[page_header] = gr.update(value=header_html)
+
+            if sys_prompt and sys_prompt.strip():
+                merged = perplexity_service.merge_brand_into_generator_prompt(
+                    current_gen_prompt, sys_prompt.strip(), bot_name or None
+                )
+                updates[prompt_generator] = gr.update(value=merged)
+            else:
+                updates[prompt_generator] = gr.update()
+
+            if brand_topics and brand_topics.strip():
+                merged_router = perplexity_service.merge_brand_into_router_prompt(
+                    current_router_prompt, brand_topics.strip()
+                )
+                updates[prompt_router] = gr.update(value=merged_router)
+            else:
+                updates[prompt_router] = gr.update()
+
+            if intro_msg and intro_msg.strip():
+                greeting = chat_history or []
+                greeting = [[None, intro_msg.strip()]] + greeting
+                updates[chatbot] = gr.update(value=greeting)
+            else:
+                updates[chatbot] = gr.update()
+
+            placeholder = f"Ask {bot_name} anything..." if bot_name else "Enter text and press ENTER"
+            updates[msg] = gr.update(placeholder=placeholder)
+
+            return updates
+
+        def _reset_theme():
+            return {
+                theme_injector: gr.update(value=""),
+                page_header: gr.update(value=_default_header_html),
+                prompt_generator: gr.update(value=_default_generator_prompt),
+                prompt_router: gr.update(value=_default_router_prompt),
+                chatbot: gr.update(value=[]),
+                msg: gr.update(placeholder="Enter text and press ENTER"),
+                wizard_status: gr.update(value="Theme reset to default."),
+                wizard_preview: gr.update(value=""),
+                wizard_apply_btn: gr.update(interactive=False),
+                wizard_extracted_bot_name: gr.update(visible=False, value=""),
+                wizard_extracted_intro: gr.update(visible=False, value=""),
+                wizard_extracted_system_prompt: gr.update(visible=False, value=""),
+                wizard_brand_topics: gr.update(visible=False, value=""),
+                wizard_theme_css: "",
+                wizard_logo_url: "",
+            }
+
+        wizard_run_btn.click(
+            _run_theme_wizard,
+            [wizard_url, wizard_api_key],
+            [wizard_status, wizard_preview, wizard_apply_btn,
+             wizard_extracted_bot_name, wizard_extracted_intro,
+             wizard_extracted_system_prompt, wizard_brand_topics,
+             wizard_theme_css, wizard_logo_url],
+        )
+
+        wizard_apply_btn.click(
+            _apply_theme,
+            [wizard_theme_css, wizard_logo_url, wizard_extracted_bot_name,
+             wizard_extracted_intro, wizard_extracted_system_prompt,
+             wizard_brand_topics, prompt_generator, prompt_router, chatbot],
+            [theme_injector, page_header, prompt_generator, prompt_router,
+             chatbot, msg],
+        )
+
+        wizard_reset_btn.click(
+            _reset_theme,
+            [],
+            [theme_injector, page_header, prompt_generator, prompt_router,
+             chatbot, msg, wizard_status, wizard_preview, wizard_apply_btn,
+             wizard_extracted_bot_name, wizard_extracted_intro,
+             wizard_extracted_system_prompt, wizard_brand_topics,
+             wizard_theme_css, wizard_logo_url],
         )
 
     page.queue()

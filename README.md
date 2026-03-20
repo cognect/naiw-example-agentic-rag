@@ -9,6 +9,7 @@
 - **Edit Prompts**: Customize results through your own prompts
 - **Change Parameters**: Adjust agent behavior through parameters and runtime variables
 - **Look and Feel**: Change the agent and UI by editing the code yourself
+- **[Theme Wizard](agentic-rag-docs/theme-wizard.md)**: AI-powered white-labeling — extract branding from any website and apply it to the chat UI
 
 ### Inference Your Way
 - **Free Endpoints**: use free endpoints on build.nvidia.com
@@ -20,6 +21,14 @@
 - **Easy Mode**: Use the application
 - **Intermediate Mode**: Modify the application
 - **Advanced Mode**: Self-host gpus for inference
+
+### API Keys
+
+| Key | Purpose | Required |
+|-----|---------|----------|
+| `NVIDIA_API_KEY` | NVIDIA API catalog for LLM inference | Yes |
+| `TAVILY_API_KEY` | Tavily web search for the agentic RAG pipeline | Yes |
+| `PERPLEXITY_API_KEY` | Perplexity Sonar model for the [Theme Wizard](agentic-rag-docs/theme-wizard.md) | Optional |
 
 ### Prerequisites - AI Workbench and an Internet Connection
 
@@ -86,6 +95,7 @@ This application is a quick prototype and not a robust piece of software. So the
    - Change the look and feel of the Gradio app or add new features
    - Modify the agent
    - Fix any bugs you find
+5. **White-label the UI** with the [Theme Wizard](agentic-rag-docs/theme-wizard.md) — extract branding from any website using AI
 
 
 </details>
@@ -105,6 +115,38 @@ Use these details if you want to modify the application, e.g. by configuring pro
 
 
 </details>
+
+## Architecture
+
+### Agentic RAG Pipeline
+
+The agent uses a LangGraph state machine with three routing paths:
+
+```
+                    ┌── direct_answer ──→ direct_generate ──→ END
+                    │
+route_question ─────┼── vectorstore ───→ retrieve → grade_docs → generate ──→ END
+                    │                                   │            ↑   │
+                    │                                   └→ websearch─┘   │
+                    └── web_search ────→ websearch ──→ generate ────────→┘
+```
+
+- **direct_answer** — Identity questions, greetings, and conversational queries are answered directly from the system prompt without document retrieval or hallucination checking.
+- **vectorstore** (default) — The preferred path for all substantive questions. Documents are retrieved from the local vector store, graded for relevance, and used to generate an answer. If no relevant local documents are found, the pipeline automatically falls back to web search.
+- **web_search** — Reserved for questions that explicitly require real-time or current-events information. Also serves as the automatic fallback when vectorstore documents are graded as irrelevant.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `code/chatui/pages/converse.py` | Gradio UI — chat interface, settings tabs, Theme Wizard |
+| `code/chatui/utils/graph.py` | LangGraph nodes and conditional edges |
+| `code/chatui/utils/compile.py` | Graph compilation and wiring |
+| `code/chatui/perplexity_service.py` | Perplexity API theme extraction + prompt merging |
+| `code/chatui/utils/color_utils.py` | WCAG 2.1 color contrast utilities |
+| `code/chatui/assets/__init__.py` | Theme loading + dynamic CSS generation |
+| `code/chatui/prompts/prompts_llama3.py` | Default prompts for Llama3 models |
+| `code/chatui/prompts/prompts_mistral.py` | Default prompts for Mistral models |
 
 # License
 This NVIDIA AI Workbench example project is under the [Apache 2.0 License](https://github.com/NVIDIA/workbench-example-agentic-rag/blob/main/LICENSE.txt)

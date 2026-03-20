@@ -19,10 +19,16 @@ The functions in this module are responsible for bootstrapping then executing th
 """
 
 import argparse
+import mimetypes
 import os
 import sys
 
 import uvicorn
+
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 
 def parse_args() -> argparse.Namespace:

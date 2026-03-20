@@ -238,12 +238,53 @@ def web_search(state):
 
 
 
+def direct_generate(state):
+    """
+    Answer conversational/identity questions directly from the system prompt.
+
+    Bypasses document retrieval and hallucination grading since identity,
+    greetings, and general knowledge answers come from the system prompt
+    rather than external documents.
+
+    Args:
+        state (dict): The current graph state
+
+    Returns:
+        state (dict): New key added to state, generation, with the direct answer
+    """
+    print("---DIRECT GENERATE (no retrieval needed)---")
+    question = state["question"]
+
+    prompt = PromptTemplate(
+        template=state["prompt_generator"],
+        input_variables=["question", "context"],
+    )
+    llm = nim.CustomChatOpenAI(
+        custom_endpoint=state["nim_generator_ip"],
+        port=state["nim_generator_port"] if len(state["nim_generator_port"]) > 0 else "8000",
+        model_name=state["nim_generator_id"] if len(state["nim_generator_id"]) > 0 else "meta/llama-3.1-8b-instruct",
+        gpu_type=state["nim_generator_gpu_type"] if "nim_generator_gpu_type" in state else None,
+        gpu_count=state["nim_generator_gpu_count"] if "nim_generator_gpu_count" in state else None,
+        temperature=0.7,
+    ) if state["generator_use_nim"] else ChatNVIDIA(model=state["generator_model_id"], temperature=0.7)
+
+    chain = prompt | llm | StrOutputParser()
+    generation = chain.invoke({
+        "context": (
+            "No external documents needed. Answer this question using your identity, "
+            "role, and personality as described in your system instructions above."
+        ),
+        "question": question,
+    })
+    return {"documents": [], "question": question, "generation": generation}
+
+
 ### Conditional edge
 
 
 def route_question(state):
     """
-    Route question to web search or RAG.
+    Route question to web search, RAG, or direct answer.
 
     Args:
         state (dict): The current graph state
@@ -268,12 +309,18 @@ def route_question(state):
     question_router = prompt | llm | JsonOutputParser()
     source = question_router.invoke({"question": question})
     print(source)
-    if source["datasource"] == "web_search":
+    if source["datasource"] == "direct_answer":
+        print("---ROUTE QUESTION TO DIRECT ANSWER---")
+        return "direct_answer"
+    elif source["datasource"] == "web_search":
         print("---ROUTE QUESTION TO WEB SEARCH---")
         return "websearch"
     elif source["datasource"] == "vectorstore":
         print("---ROUTE QUESTION TO RAG---")
         return "vectorstore"
+    else:
+        print("---ROUTE QUESTION TO WEB SEARCH (fallback)---")
+        return "websearch"
 
 
 def decide_to_generate(state):

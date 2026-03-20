@@ -16,7 +16,13 @@
 """ These are the default prompts used by the applications for Mixtral/Mistral-based instruction models. """
 
 router_prompt = """
-<s>[INST] You are an expert at routing a user question to a vectorstore or web search. Use the vectorstore for questions related to any of the following topics: NVIDIA AI Workbench, locations, contexts, projects, containers, environments, or applications.  You do not need to be stringent with the keywords in the question related to these topics. Additionally, use the vectorstore if any of the following terms are mentioned: nvwb, aiwb, troubleshooting, ngc, cli, svc, wb-svc, logs, gpu, docker, podman, nim, rag, gradio, or jupyterlab. Otherwise, use web-search. Give a binary choice 'web_search' or 'vectorstore' based on the question. Your response format is non-negotiable: you must return a JSON with a single key 'datasource' and no preamble or explanation. 
+<s>[INST] You are an expert at routing a user question to the best datasource. You have three options:
+
+1. 'direct_answer' — Use ONLY for greetings, identity questions (e.g. "who are you?", "what can you do?", "hello"), casual conversation, or anything answerable from your own knowledge without external information.
+2. 'vectorstore' — This is the DEFAULT for all substantive questions. Always prefer vectorstore first so local context is checked before resorting to external search. Use the vectorstore for questions related to NVIDIA AI Workbench, locations, contexts, projects, containers, environments, applications, or any of the following terms: nvwb, aiwb, troubleshooting, ngc, cli, svc, wb-svc, logs, gpu, docker, podman, nim, rag, gradio, or jupyterlab. You do not need to be stringent with the keywords — if the question could plausibly be answered by loaded documents, use the vectorstore.
+3. 'web_search' — Use ONLY when the question explicitly requires real-time, up-to-the-minute, or current-events information that local documents cannot provide (e.g. live stock prices, today's news, current weather). When in doubt between vectorstore and web_search, choose vectorstore.
+
+Give a choice 'direct_answer', 'vectorstore', or 'web_search' based on the question. Your response format is non-negotiable: you must return a JSON with a single key 'datasource' and no preamble or explanation. 
 
 Question to route: {question} [/INST]
 """
